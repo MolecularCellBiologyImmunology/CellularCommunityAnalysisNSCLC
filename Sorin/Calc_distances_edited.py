@@ -32,44 +32,35 @@ from datetime import datetime
     *NOTE      :  Always use [] for lst1/lst2. If wanting to select all cell types keep [] empty* 
 """
 
-def cell_distances(cutoff, data, allData, domain, clustering, lst1, lst2, save_ind, save_all, output_path):
+def cell_distances(cutoff, data, output_path):
     
     #Create an empty data frame for later use
     merged = pd.DataFrame()
-    #If allData = 0, take domain info. If allData = 1, skip taking domain info
-    if allData == "0":
-        # Remove any rows that have an NA in the domain column
-        data = data[data['domain'].notna()]
-        # Take data just from the selected domain
-        data = data[data['domain'].str.match(domain)]
         
-    ROIs = set(data.ROI_name)
-    ROIs = list(ROIs)
+    pats = set(data.Patient_ID)
+    pats = list(pats)
     # Run distance calculation on each ROI separately
-    for ROI in ROIs:
-        print(ROI)
+    for pat in pats:
+        print(pat)
         # Subset data for cell types of interest 
-        if not lst1:
-            cells_A = data[data['ROI_name'].str.match(ROI)]
-        else: 
-            cells_A = data[data['ROI_name'].str.match(ROI) & data[clustering].isin(lst1)]
-        if not lst2:
-            cells_B = data[data['ROI_name'].str.match(ROI)]
-        else: 
-            cells_B = data[data['ROI_name'].str.match(ROI) & data[clustering].isin(lst2)]
+
+        cells_A = data[data['Patient_ID'].str.match(pat)]
+
+        cells_B = data[data['Patient_ID'].str.match(pat)]
+
         print("cells_A and cells_B created")
             
         # Call distance calculator function 
-        distances  = distance_matrix(cutoff, cells_A[['Location_Center_X', 'Location_Center_Y']], cells_B[['Location_Center_X', 'Location_Center_Y']])
+        distances  = distance_matrix(cutoff, cells_A[['Location_Center_X', 'Location_Center_Y']], cells_B[['Location_Center_X', 'Location_Center_Y']], pat)
         print('distances function complete')
         
         if distances.empty == True:
-            print(f"No neighbours within {cutoff} pixels were identified for {ROI}")
+            print(f"No neighbours within {cutoff} pixels were identified for {pat}")
             continue
         print("Tested for presence of neighbours in distances dictionary")
         
         # Call assinging cellID function 
-        neighbours = assigning_cellID(cells_A, cells_B, distances, ROI, cutoff, clustering, save_ind)
+        neighbours = assigning_cellID(cells_A, cells_B, distances, pat, cutoff)
         print('assigning cell ID function complete')
         # print(neighbours, 'uhigrh')
         merged = pd.concat([merged, neighbours], ignore_index=True)
@@ -79,13 +70,12 @@ def cell_distances(cutoff, data, allData, domain, clustering, lst1, lst2, save_i
     merged = merged.reset_index(drop = True)
 
     # Save the concatenated dataset
-    merged = merged.drop(columns=['treatment'])
-    merged.to_csv(f"{output_path}20240217_allROIs_{cutoff}px_{save_all}", index = False)
+    merged.to_csv(f"{output_path}dists_cellpairs_{cutoff}px_{date}.csv", index = False)
     print("Function complete")
 
 
 #### Distance calculation function ####
-def distance_matrix(cutoff, points1, points2):
+def distance_matrix(cutoff, points1, points2, pat):
     
     tree1 = scipy.spatial.cKDTree(points1, leafsize=16)
     if points2 is None:
@@ -97,7 +87,7 @@ def distance_matrix(cutoff, points1, points2):
     # CONVERT DISTANCES DIRECTORY INTO NEIGHBOURS DATAFRAME
     # Only carry on with next steps if distances dictionary has neighbour values 
     if bool(distances) == True:
-        print("distances found for {ROI}")
+        print("distances found for {pat}")
         keys = pd.DataFrame.from_dict(distances.keys())
         values = pd.DataFrame.from_dict(distances.values())
         # Give name to values dataframe 
@@ -119,7 +109,7 @@ def distance_matrix(cutoff, points1, points2):
 
 
 #### Assigning information to cells identified as neighbours ####
-def assigning_cellID(cells_A, cells_B, distances, ROI, cutoff, clustering, save_ind):
+def assigning_cellID(cells_A, cells_B, distances, pat, cutoff):
     
     # Link distances.source values to cellIDs in subset1
     cellsA_id = pd.DataFrame(cells_A.cellID.unique(), columns = ['source_cellID'])
@@ -145,50 +135,48 @@ def assigning_cellID(cells_A, cells_B, distances, ROI, cutoff, clustering, save_
     # changed this line cause think its a typo
     #     distj = distj.rename(columns = {'index':'source_ID', f"{clustering}":'source_cluster', 'Location_Center_X':'source_X', 'Location_Center_Y':'source_Y'})
 
-    distj = distj.rename(columns = {'source_cellID':'source_ID', f"{clustering}":'source_cluster', 'Location_Center_X':'source_X', 'Location_Center_Y':'source_Y'})
+    distj = distj.rename(columns = {'source_cellID':'source_ID', "class":'source_cluster', 'Location_Center_X':'source_X', 'Location_Center_Y':'source_Y'})
 
     # Add marker info for target cells 
-    distj = distj.set_index(['cellID', 'treatment', 'ROI_name'])
-    cells_B = cells_B.set_index(['cellID', 'treatment', 'ROI_name'])
+    distj = distj.set_index(['cellID', 'Patient_ID'])
+    cells_B = cells_B.set_index(['cellID', 'Patient_ID'])
     distj = distj.join(cells_B)
     # Order dataframe by source_ID
     distj.sort_values('source_ID')
     distj = distj.reset_index()
     # Rename and re-order columns 
-    distj = distj.rename(columns = {'cellID':'target_ID', f"{clustering}":'target_cluster', 'Location_Center_X':'target_X', 'Location_Center_Y':'target_Y'})
+    distj = distj.rename(columns = {'cellID':'target_ID', "class":'target_cluster', 'Location_Center_X':'target_X', 'Location_Center_Y':'target_Y'})
     distj = distj[['source_ID', 'target_ID', 'distance', 'source_X', 'source_Y', 'target_X', 'target_Y', 'source_cluster',
-            'target_cluster','ROI_name', 'treatment']]
+            'target_cluster','Patient_ID']]
 
     # Return/save neighbours 
-    distj_notreat = distj.drop(columns=['treatment'])
 
-    distj_notreat.to_csv(f"{output_path}20240217_{ROI}_{cutoff}px_{save_ind}", index = False)
-    print('Assinging cellID complete')
+    # distj_notreat.to_csv(f"{output_path}20240217_{ROI}_{cutoff}px_{save_ind}", index = False)
+    print('Assigning cellID complete')
     return distj
 
 ######################################################################################################
 
 # Set the working directory 
 # path = "/Users/vanmalf/Documents/Amsterdam/Collaborations/Iris Miedema/Results/outputs_Febe/neighbours/"
-current_directory = os.getcwd()
+cwd = os.getcwd()
 
-output_path = f"{current_directory}/distance_calcs/"
-os.makedirs(output_path, exist_ok=True)
+date = datetime.now().strftime("%Y%m%d")
+
+output_path = f"{cwd}/Data/distances/"
 
 # Load the data 
-input_path = f"{current_directory}/celldata/"
+input_path = f"{cwd}/Data/celldata/"
 
-celldata = pd.read_csv(f"{input_path}20240208_celldata.csv")
+celldata = pd.read_csv(f"{input_path}celldata_{date}.csv")
 
 # Only take cell columns of interest
 # list(celldata)
-celldata = celldata[['ROI_name', 'cellID', 'study', 'class','Location_Center_X', 'Location_Center_Y']]
-celldata = celldata.rename(columns={ "study":"treatment"})
+celldata = celldata[['Patient_ID', 'cellID', 'class','Location_Center_X', 'Location_Center_Y']]
 
 # Please note: Do you want to set a threshold? This will filter out all other distances!
 # Only use threshold if this table will be reused to build a neighbours table
 # If the distance as measurement is used for generating plots, then set a very large threshold.
 # Call cell distances function to get dataset with distances calculated 
-neighbours = cell_distances(35, celldata, allData = "1", domain = "", clustering = "class", lst1 = [], lst2 = [],
-save_ind = "neighbours_distance_calculation.csv", save_all = "neighbours_distanceCalculation_allCells.csv", output_path = output_path)
+neighbours = cell_distances(35, celldata, output_path = output_path)
 
