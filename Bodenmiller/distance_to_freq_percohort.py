@@ -15,7 +15,7 @@ cutoff = 25
 
 for cohort in cohorts:
     # Find datafile
-    dists = pd.read_csv(f"{input_path}dists_cellpairs_{cohort}__{cutoff}px_{date}.csv")
+    dists = pd.read_csv(f"{input_path}dists_cellpairs_{cohort}_{cutoff}px_{date}.csv")
 
     # Convert datafile of distances to relative frequency of source and target cell per source_id and per patient
     count_df = dists.groupby(['acID', 'Patient_ID','source_ID','source_cluster', 'target_cluster']).size().reset_index(name='count')
