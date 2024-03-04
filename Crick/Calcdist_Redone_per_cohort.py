@@ -31,33 +31,33 @@ from datetime import datetime
     *NOTE      :  Always use [] for lst1/lst2. If wanting to select all cell types keep [] empty* 
 """
 
-def cell_distances(cutoff, data, date, output_path):
+def cell_distances(cutoff, data, date, group, output_path):
     
     #Create an empty data frame for later use
     merged = pd.DataFrame()
     #If allData = 0, take domain info. If allData = 1, skip taking domain info
         
-    acIDs = set(data.acID)
-    acIDs = list(acIDs)
+    ROIs = set(data.Unique_ROI_ID)
+    ROIs = list(ROIs)
     # Run distance calculation on each acID separately
 
-    for acID in acIDs:
-        print(acID)
-        cells_A = data[data['acID'] == acID]
-        cells_B = data[data['acID'] == acID]
-        Patient_ID = cells_A['Patient_ID'].unique()
+    for ROI in ROIs:
+        print(ROI)
+        cells_A = data[data['Unique_ROI_ID'] == ROI]
+        cells_B = data[data['Unique_ROI_ID'] == ROI]
+        # Patient_ID = cells_A['Patient_ID'].unique()
         print("cells_A and cells_B created")
             
         # Call distance calculator function 
         distances  = distance_matrix(cutoff, cells_A[['Location_Center_X', 'Location_Center_Y']], cells_B[['Location_Center_X', 'Location_Center_Y']])
         print('distances function complete')
         if distances.empty == True:
-            print(f"No neighbours within {cutoff} pixels were identified for {acID}")
+            print(f"No neighbours within {cutoff} pixels were identified for {ROI}")
             continue
         print("Tested for presence of neighbours in distances dictionary")
         
         # Call assinging cellID function 
-        neighbours = assigning_cellID(cells_A, cells_B, distances, acID, Patient_ID, cutoff)
+        neighbours = assigning_cellID(cells_A, cells_B, distances, ROI, cutoff)
         print('assigning cell ID function complete')
         merged = pd.concat([merged, neighbours], ignore_index=True)
         # merged = merged.append(neighbours)
@@ -66,7 +66,7 @@ def cell_distances(cutoff, data, date, output_path):
     merged = merged.reset_index(drop = True)
 
     # Save the concatenated dataset
-    merged.to_csv(f"{output_path}dists_cellpairs_{cohort}_{cutoff}px_{date}.csv", index = False)
+    merged.to_csv(f"{output_path}dists_cellpairs_{group}_{cutoff}px_{date}.csv", index = False)
     print("Function complete")
 
 
@@ -83,7 +83,7 @@ def distance_matrix(cutoff, points1, points2):
     # CONVERT DISTANCES DIRECTORY INTO NEIGHBOURS DATAFRAME
     # Only carry on with next steps if distances dictionary has neighbour values 
     if bool(distances):
-        print(f"distances found for acID")
+        print(f"distances found for ROI")
         keys = pd.DataFrame.from_dict(distances.keys())
         values = pd.DataFrame.from_dict(distances.values())
         # Give name to values dataframe 
@@ -105,14 +105,14 @@ def distance_matrix(cutoff, points1, points2):
 
 
 #### Assigning information to cells identified as neighbours ####
-def assigning_cellID(cells_A, cells_B, distances, acID, Patient_ID, cutoff):
+def assigning_cellID(cells_A, cells_B, distances, ROI, cutoff):
     
     # Link distances.source values to cellIDs in subset1
-    cellsA_id = pd.DataFrame(cells_A.cellID.unique(), columns = ['source_cellID'])
+    cellsA_id = pd.DataFrame(cells_A.CellID.unique(), columns = ['source_cellID'])
     cellsA_id = cellsA_id[cellsA_id.index.isin(distances.source)]
 
     # Link distances.target values to cellIDs in subset2
-    cellsB_id = pd.DataFrame(cells_B.cellID.unique(), columns = ['cellID'])
+    cellsB_id = pd.DataFrame(cells_B.CellID.unique(), columns = ['CellID'])
     cellsB_id = cellsB_id[cellsB_id.index.isin(distances.target)]
 
     # Add cellID info for source and target cells
@@ -123,19 +123,19 @@ def assigning_cellID(cells_A, cells_B, distances, acID, Patient_ID, cutoff):
 
     # Add marker info for source cells 
     distj = distj.set_index(['source_cellID'])
-    cells_A = cells_A.set_index(['cellID'])
+    cells_A = cells_A.set_index(['CellID'])
     distj = distj.join(cells_A)
 
     distj = distj.reset_index()
 
     # Rename new columns linking them to source cells
-    distj = distj.rename(columns = {'source_cellID':'source_ID', "class":'source_cluster', 'Location_Center_X':'source_X', 'Location_Center_Y':'source_Y'})
+    distj = distj.rename(columns = {'source_cellID':'source_ID', 'cluster_num':'source_cluster', 'Location_Center_X':'source_X', 'Location_Center_Y':'source_Y'})
 
     # Add marker info for target cells 
-    distj = distj.set_index(['cellID'])
-    cells_B = cells_B.set_index(['cellID'])
+    distj = distj.set_index(['CellID'])
+    cells_B = cells_B.set_index(['CellID'])
     cells_B = cells_B.rename(columns = {'source_cluster': 'target_cluster'})
-    cells_B.drop(columns=['acID', 'Patient_ID'], inplace=True)
+    cells_B.drop(columns=['Unique_ROI_ID'], inplace=True)
     distj = distj.join(cells_B)
 
     # Order dataframe by source_ID
@@ -143,13 +143,13 @@ def assigning_cellID(cells_A, cells_B, distances, acID, Patient_ID, cutoff):
     distj = distj.reset_index()
 
     # Rename and re-order columns 
-    distj = distj.rename(columns = {'cellID':'target_ID', "class":'target_cluster', 'Location_Center_X':'target_X', 'Location_Center_Y':'target_Y'})
+    distj = distj.rename(columns = {'CellID':'target_ID', 'cluster_num':'target_cluster', 'Location_Center_X':'target_X', 'Location_Center_Y':'target_Y'})
     distj = distj[['source_ID', 'target_ID', 'distance', 'source_X', 'source_Y', 'target_X', 'target_Y', 'source_cluster',
-            'target_cluster','acID', 'Patient_ID']]
+            'target_cluster','Unique_ROI_ID']]
 
 
     # distj.to_csv(f"{output_path}20240228_{acID}_{cutoff}px_{save_ind}", index = False)
-    print(f'{acID} and {Patient_ID}, Assigning cellID complete')
+    print(f'{ROI}, Assigning CellID complete')
     return distj
 
 ######################################################################################################
@@ -157,20 +157,21 @@ def assigning_cellID(cells_A, cells_B, distances, acID, Patient_ID, cutoff):
 # Set the working directory 
 # path = "/Users/vanmalf/Documents/Amsterdam/Collaborations/Iris Miedema/Results/outputs_Febe/neighbours/"
 cwd = os.getcwd()
-input_path = f"{cwd}/Data/intermediate/"
+input_path = f"{cwd}/Data/celldata/"
 
 output_path = f"{cwd}/Data/distances/"
-cohorts = ['86_A', '86_B', '86_C', '87_A', '87_B', '87_C', '88_A', '88_B', '88_C', '175_A', '175_B', '175_C', '176_A', '176_B', '176_C', '178_A', '178_B', '178_C']
+
+groups = ['MOC1_MOCAF', 'MOC1_WT', 'MOC2_CCR2KO', 'MOC2_WT']
 
 today = datetime.now()
 date = today.strftime("%Y%m%d")
-for cohort in cohorts:
-    celldata = pd.read_csv(f"{input_path}{cohort}_annotated.csv")
 
+for group in groups:
+    celldata = pd.read_csv(f"{input_path}{group}_celldata_{date}.csv")
     # Only take cell columns of interest
-    celldata = celldata[['acID', 'cellID', 'Patient_ID', 'source_cluster','Location_Center_X', 'Location_Center_Y']]
+    celldata = celldata[['Location_Center_X', 'Location_Center_Y', 'cluster_num', 'Unique_ROI_ID', 'CellID']]
     # Set maximum pixel/micron distance for cells to be considered neighbours
     # Note Distance is calculated cell center to cell center, so take radius into account
     max_distance = 25
-    neighbours = cell_distances(25, celldata, date, output_path = output_path)
+    neighbours = cell_distances(25, celldata, date, group, output_path = output_path)
 
