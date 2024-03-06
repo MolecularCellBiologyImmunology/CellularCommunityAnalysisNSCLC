@@ -67,6 +67,8 @@ def cell_distances(cutoff, data, date, group, output_path):
 
     # Save the concatenated dataset
     merged.to_csv(f"{output_path}dists_cellpairs_{group}_{cutoff}px_{date}.csv", index = False)
+    print(f"Here's a preview:")
+    print(merged.head())
     print("Function complete")
 
 
@@ -163,8 +165,7 @@ output_path = f"{cwd}/Data/distances/"
 
 groups = ['MOC1_MOCAF', 'MOC1_WT', 'MOC2_CCR2KO', 'MOC2_WT']
 
-today = datetime.now()
-date = today.strftime("%Y%m%d")
+date = datetime.now().strftime("%Y%m%d")
 
 for group in groups:
     celldata = pd.read_csv(f"{input_path}{group}_celldata_{date}.csv")
