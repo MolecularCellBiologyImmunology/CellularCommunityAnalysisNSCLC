@@ -9,9 +9,9 @@ current_directory = os.getcwd()
 date = datetime.now().strftime("%Y%m%d")
 cutoff = 25
 # Find datafile
-# path = f"{current_directory}/Data/distances/dists_cellpairs_{cutoff}px_{date}.csv"
+path = f"{current_directory}/Data/distances/dists_cellpairs_{cutoff}px_{date}.csv"
 
-path = f"{current_directory}/Data/distances/dists_cellpairs_35px_20240229.csv"
+# path = f"{current_directory}/Data/distances/dists_cellpairs_25px_20240229.csv"
 dists = pd.read_csv(path)
 
 # Convert datafile of distances to relative frequency of source and target cell per source_id and per patient
@@ -38,6 +38,6 @@ print('Dataset converted, below is a preview:\n',freq.head())
 output_path = f"{current_directory}/Data/frequencies/"
 
 # totalscid.to_csv(f"{output_path}frequencies_cells_{cutoff}px_{date}.csv", index = False)
-totalscid.to_csv(f"{output_path}frequencies_cells_{cutoff}px_20240229.csv", index = False)
+freq.to_csv(f"{output_path}frequencies_{cutoff}px_{date}.csv", index = False)
 
 

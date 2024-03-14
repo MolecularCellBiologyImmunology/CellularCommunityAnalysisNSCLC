@@ -70,13 +70,13 @@ def cell_distances(cutoff, data, output_path):
     merged = merged.reset_index(drop = True)
 
     # Save the concatenated dataset
-    merged.to_csv(f"{output_path}dists_cellpairs_{cutoff}px_{date}.csv", index = False)
+    merged.to_csv(f"{output_path}dists_cellpairs_{cutoff}px_{date}_ss.csv", index = False)
     print("Function complete")
 
 
 #### Distance calculation function ####
 def distance_matrix(cutoff, points1, points2, pat):
-    
+    la, lb = len(points1), len(points2)
     tree1 = scipy.spatial.cKDTree(points1, leafsize=16)
     if points2 is None:
         points2 = points1
@@ -98,6 +98,9 @@ def distance_matrix(cutoff, points1, points2, pat):
         neighbours.sort_values([0,1], inplace = True) #Check this is sorting and not new values
         # Reset the index 
         neighbours = neighbours.reset_index(drop = True)
+
+        if neighbours.iloc[:,0].nunique() != la:
+            print('acells missing')
         # Rename column names 0 --> 'source' and 1 --> 'target'
         neighbours.rename(columns={neighbours.columns[0]: 'source', neighbours.columns[1]: 'target'}, inplace=True)
         # Subset for distances > 0 
@@ -178,5 +181,5 @@ celldata = celldata[['Patient_ID', 'cellID', 'class','Location_Center_X', 'Locat
 # Only use threshold if this table will be reused to build a neighbours table
 # If the distance as measurement is used for generating plots, then set a very large threshold.
 # Call cell distances function to get dataset with distances calculated 
-neighbours = cell_distances(35, celldata, output_path = output_path)
+neighbours = cell_distances(25, celldata, output_path = output_path)
 
