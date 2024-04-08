@@ -41,15 +41,6 @@ colours1 =  c("B cells" = "#945931",  "Dendritic cells" = "#FF9933", "Dendritic 
               "Macrophages type 2" = "#4E79A7FF", "Neutrophils" = "#A0CBE8FF", "NK cells" = "#938ABBFF", "T cells CD4" = "#B07AA1FF",
               "T cells CD8" = "#FF9D9AFF", "T reg cells" = "#CC6666", "Tumour" = "#704850FF", "Unclassified" = "#8C8C8C")
 
-#### Dataset 2 setup ####
-neighb2 = read.csv(paste0(path, "20220823_dataset2_neighb_254communities_agglom18.csv"))
-
-colours2 = c("B cells" = "#945931", "Dendritic cells" = "#FF9933", "Dendritic cells CD103" = "#FFCC66", "Fibroblasts" = "#ABDDA4FF",
-             "Leukocytes unclassified" = "#7A9F79", "Macrophages type 1" = "#336666", "Macrophages type 2" = "#4E79A7FF",
-             "NK cells" = "#938ABBFF", "T cells CD4" = "#B07AA1FF", "T cells CD8" = "#FF9D9AFF", "T cells DN" = "#FFB5CB",
-             "T reg cells" = "#CC6666", "Tumour" = "#704850FF", "Unclassified" = "#8C8C8C")
-
-##################################################################################################################################
 
 ###################
 #### Functions ####
