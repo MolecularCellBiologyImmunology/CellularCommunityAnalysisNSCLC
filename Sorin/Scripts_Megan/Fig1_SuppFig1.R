@@ -35,7 +35,9 @@ data1 = read.csv(paste0(path, "20230904_dataset1_celldata.csv"))
 neighb1 = read.csv(paste0(path, "20220823_dataset1_neighb_62communities_agglom18.csv"))
 
 agglom30 = read.csv(paste0(path, "Figure1/20220216_dataset1_average_neighbours_62clusters_agglom30.csv"))
-
+curves_1nn %>%
+  filter(phenotype_combo == spatial_relationship) %>% 
+  mutate(fitted=weibfunc(WinMean, initial_parameters_selected$shape, initial_parameters_selected$scale))
 colours1 =  c("B cells" = "#945931",  "Dendritic cells" = "#FF9933", "Dendritic cells CD103" = "#FFCC66", "Endothelium" = "#FFEA42",
               "Epithelium" = "#FFF4A4FF", "Fibroblasts" = "#ABDDA4FF", "Macrophages other" = "#618F75FF", "Macrophages type 1" = "#336666",
               "Macrophages type 2" = "#4E79A7FF", "Neutrophils" = "#A0CBE8FF", "NK cells" = "#938ABBFF", "T cells CD4" = "#B07AA1FF",

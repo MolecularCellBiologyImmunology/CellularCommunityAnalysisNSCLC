@@ -59,41 +59,39 @@ B_max <- 500 # max scale parameter (0,500]
 A_max <- 10  # max shape parameter (0,10]
 
 threshold_pixels <- 300
-threshold_microns <- threshold_pixels
+threshold_microns <- threshold_pixels/2
 
 ##### Get input system arguments
 args = commandArgs(trailingOnly=TRUE)
 
 # Double-check there is at least one argument (input file name)
-
-# default output file
-args[1] = "Data/celldata/celldata_20240506.csv"
-args[2] = "results/step1_1nn_output.csv"
-args[3] = "results/step2_weibull_initial_params.csv"
-args[4] = "step3_fittednlme_weibull_params.csv"
-
+if (length(args)==0) {
+  stop("You must parse an input file", call.=FALSE)
+} else if (length(args)==2) {
+  # default output file
+  message("Output file not specified. Using default: ~/results/step2_weibull_initial_params.tsv")
+  args[3] = "step3_fittednlme_weibull_params.tsv"
+}
 spatial_data_file                 <- args[1]  # File with x/y coordinates from the multiplex immunofluorescence experiment
 firstNNhistogram_coordinates      <- args[2]  # it's the output from 1__get1NNdistances.R
 initial_params_file               <- args[3]  # it's the output from 2__estimateInitialParameters.R
 output_file                       <- args[4]
 forced_initial_params             <- NULL     # file with initial parameters to use (if user wants to force them)
 
-dumdat <- read_delim(spatial_data_file, delim=',')
+dumdat <- read_delim(spatial_data_file, delim='\t')
 dumdat <- as_tibble(dumdat)
 
 
 # Load initial Weibull parameters (output from 2__estimateInitialParameters.R)
-initial_params <- read_delim(initial_params_file,delim=',')
-initial_params <- initial_params %>% drop_na(estimate)
+initial_params <- read_delim(initial_params_file,delim='\t')
 
-
-# Calculate number of cellsestimate# Calculate number of cells for each cell type / sample (will be used later for filtering purposes)
-n_cells <- dumdat %>% group_by(Patient_ID, celltype) %>% dplyr::summarise(n=n()) %>% as_tibble()
+# Calculate number of cells for each cell type / sample (will be used later for filtering purposes)
+n_cells <- dumdat %>% group_by(sample_id, phenotype) %>% dplyr::summarise(n=n()) %>% as_tibble()
 rm(dumdat)
 
-xy_data_exc_oct <- read_delim( firstNNhistogram_coordinates,delim=',') %>%
+xy_data_exc_oct <- read_delim( firstNNhistogram_coordinates,delim='\t') %>%
   mutate(distance_window = WinMean) %>%
-  mutate(x=distance_window, y=`count_scaled`) 
+  mutate(x=distance_window, y=`N.per.mm2.scaled`) 
 
 
 
@@ -125,27 +123,7 @@ weibfunc2 <- function(x,A,B){
 nfun2 <- deriv(nform2,namevec=c("A","B"),
                function.arg=c("x","A","B"))
 
-## with the name of the failed phenotype combination is returned
-combi <- combinations_to_study[1]
-xy_data_filt <- xy_data_exc_oct %>% filter(phenotype_combo == combi) %>% as_tibble
 
-xy_data_filt <- xy_data_filt %>%
-  left_join(n_cells %>% mutate(n_from=n) %>% dplyr::select(-n), by=c('Patient_ID','phenotype_from'='celltype')) %>%
-  left_join(n_cells %>% mutate(n_to=n) %>% dplyr::select(-n), by=c('Patient_ID','phenotype_to'='celltype'))
-message(xy_data_filt %>% filter(n_from<=threshold_cells & n_to <= threshold_cells) %>%
-          mutate(Patient_ID=paste(Patient_ID, 'nFROM', as.character(n_from), 'nTO',as.character(n_to))) %>%
-          pull(Patient_ID) %>% unique %>% paste(collapse=' / '))
-
-xy_data_filt <- xy_data_filt %>% filter(n_from>0 & n_to > 0)
-xy_data_filt <- expand.grid(x=c(2,xy_data_filt %>%pull(distance_window) %>% unique),
-                            Patient_ID=xy_data_filt %>%pull(Patient_ID) %>% unique,
-                            phenotype_combo=combi) %>%
-  left_join(xy_data_filt, by=c('x','Patient_ID', 'phenotype_combo')) %>%
-  mutate(y=ifelse(is.na(y),0,y))
-
-mean_params <- initial_params %>% filter(combo == combi) %>%
-  filter(Patient_ID %in% unique(xy_data_filt$Patient_ID)) %>% 
-  group_by(term) %>% dplyr::summarise(mean_estimate = mean(estimate))
 
 # Define function to fit a Weibull model to x/y coordinates of normalized 1-NN distance
 ## distribution coordinates, filtering out samples with n_cells < threshold_filter_cells
@@ -161,13 +139,13 @@ fit_data <- function(xy_coordinates_curves, combi, n_cells_df, threshold_filter_
   xy_data_filt <- xy_coordinates_curves %>% filter(phenotype_combo == combi) %>% as_tibble
   
   xy_data_filt <- xy_data_filt %>% 
-    left_join(n_cells_df %>% mutate(n_from=n) %>% dplyr::select(-n), by=c('Patient_ID','phenotype_from'='celltype')) %>%
-    left_join(n_cells_df %>% mutate(n_to=n) %>% dplyr::select(-n), by=c('Patient_ID','phenotype_to'='celltype'))
+    left_join(n_cells_df %>% mutate(n_from=n) %>% dplyr::select(-n), by=c('sample_id','phenotype_from'='phenotype')) %>%
+    left_join(n_cells_df %>% mutate(n_to=n) %>% dplyr::select(-n), by=c('sample_id','phenotype_to'='phenotype'))
   
   threshold_cells <- threshold_filter_cells
   message(xy_data_filt %>% filter(n_from<=threshold_cells & n_to <= threshold_cells) %>%
-            mutate(Patient_ID=paste(Patient_ID, 'nFROM', as.character(n_from), 'nTO',as.character(n_to))) %>% 
-            pull(Patient_ID) %>% unique %>% paste(collapse=' / '))
+            mutate(sample_id=paste(sample_id, 'nFROM', as.character(n_from), 'nTO',as.character(n_to))) %>% 
+            pull(sample_id) %>% unique %>% paste(collapse=' / '))
   
   xy_data_filt <- xy_data_filt %>% filter(n_from>threshold_cells & n_to > threshold_cells)
   
@@ -175,20 +153,18 @@ fit_data <- function(xy_coordinates_curves, combi, n_cells_df, threshold_filter_
   ## i.e. if no distances were observed beyond 100 microns, the normalized scaled counts 
   ## from 100 to 300 microns will be set to 0 
   # include 0,0 or only 1,0??
-  xy_data_filt <- expand.grid(x=c(2,xy_data_filt %>%pull(distance_window) %>% unique), 
-                              Patient_ID=xy_data_filt %>%pull(Patient_ID) %>% unique,
+  xy_data_filt <- expand.grid(x=c(1,xy_data_filt %>%pull(distance_window) %>% unique), 
+                              sample_id=xy_data_filt %>%pull(sample_id) %>% unique,
                               phenotype_combo=combi) %>%
-    left_join(xy_data_filt, by=c('x','Patient_ID', 'phenotype_combo')) %>%
+    left_join(xy_data_filt, by=c('x','sample_id', 'phenotype_combo')) %>%
     mutate(y=ifelse(is.na(y),0,y))
   
   mean_params <- initial_params_df %>% filter(combo == combi) %>%
-    filter(Patient_ID %in% unique(xy_data_filt$Patient_ID)) %>% 
+    filter(sample_id %in% unique(xy_data_filt$sample_id)) %>% 
     group_by(term) %>% dplyr::summarise(mean_estimate = mean(estimate))
   
   start_params <- c(a=mean_params %>% filter(term == 'shape') %>% pull(mean_estimate),
                     b=mean_params %>% filter(term == 'scale') %>% pull(mean_estimate))
-  message('Mean parameters_ before forced:')
-  message(mean_params)
   # If user provided initial parameters, use them instead of the mean
   if(!is.null(forced_initial_params)){
     start_params <- c(a=forced_initial_params %>% filter(phenotype_combo == combi) %>% pull(a),
@@ -202,8 +178,8 @@ fit_data <- function(xy_coordinates_curves, combi, n_cells_df, threshold_filter_
   fit52_oct <- tryCatch({
     nlme(y~nfun2(x,A,B),
          fixed=A+B~1,
-         random=list(Patient_ID=pdDiag(A+B~1)), # or pdDiag, pdLogChol
-         data=xy_data_filt %>% mutate(Patient_ID = factor(Patient_ID)),
+         random=list(sample_id=pdDiag(A+B~1)), # or pdDiag, pdLogChol
+         data=xy_data_filt %>% mutate(sample_id = factor(sample_id)),
          start=convert_params(start_params['a'], start_params['b']),
          method='REML', control = nlmeControl(maxIter = 1000, 
                                               returnObject = F,
@@ -235,7 +211,7 @@ fit_data <- function(xy_coordinates_curves, combi, n_cells_df, threshold_filter_
 # * failed CD3+FoxP3+_to_CD20+
 
 # Define phenotype combinations to study in data
-combinations_to_study <- unique(xy_data_exc_oct %>% pull(phenotype_combo))[1:3]
+combinations_to_study <- unique(xy_data_exc_oct %>% pull(phenotype_combo))
 
 success_models <- list() # Fitted models
 
@@ -298,6 +274,7 @@ for(threshold_cells in c(0,20,50,70,100)){
   
 }
 
+
 # Process parameters (extract weibull paramters from fixed/random effects)
 final_weibull_parameters <- data.frame()
 for(combi in names(success_models)){
@@ -306,14 +283,14 @@ for(combi in names(success_models)){
   
   final_weibull_parameters <- final_weibull_parameters %>% 
     bind_rows(  ranef %>%
-                  mutate(Patient_ID= rownames(ranef),
+                  mutate(sample_id= rownames(ranef),
                          phenotype_combo=combi) %>% 
                   mutate(A = A + fixefect[['A']],
-                         B = B + fisxefect[['B']]) %>%
+                         B = B + fixefect[['B']]) %>%
                   mutate(a=10/(1+exp(-A)),b=500/(1+exp(-B))))
   
 }
 
 # Save final Weibull parameters
 write_delim(final_weibull_parameters,  
-            output_file, delim=',')
+            output_file, delim='\t')
