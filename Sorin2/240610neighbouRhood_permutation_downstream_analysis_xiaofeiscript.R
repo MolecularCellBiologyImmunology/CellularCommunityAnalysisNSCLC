@@ -266,7 +266,10 @@ data$log2 = log2(data$mean_obs / data$mean_perm)
 
 
 # get rid of inf and -inf in log2 by removing 0 counts
-celltypes_filter = c("Tc", "Th", 'B', 'Endothelial', 'Cl_Mac')
+# celltypes_filter = c("Tc", "Treg", 'T_other', 'Neutrophil', 'Cl_Mac', 'B')
+# celltypes_filter = c("Tc", "Th", 'B', 'Endothelial', 'Cl_Mac', 'Treg')
+celltypes_filter = c("Tc", "Th", 'Endothelial', 'Cl_Mac')
+
 community_filter = c(26, 27)
 
 
@@ -356,7 +359,7 @@ geom_vline(xintercept = -0.3, linetype = "dashed", color = "black")+
 ggsave(
   filename =   paste(
     output_path,
-    "volcano_2627_cellfilter_hits",
+    "volcano_2627_cellfilter_hits_fimp+treg",
     ".jpg",
     sep = ""
   ),
