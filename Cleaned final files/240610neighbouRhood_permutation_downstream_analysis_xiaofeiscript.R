@@ -1,0 +1,235 @@
+
+
+#### Downstream analysis of neighbourhood permutation test ####
+
+## Megan Cole
+## 2021
+
+## Scripts required to run previous to this:
+# -Normalisation, concatenation and scaling of single cell data
+# -Rphenograph clustering of normalised and scaled data
+# -Preparation for neighbourhood permuation
+# -NeighbouRhood permutation
+
+# Clear working environment
+rm(list = ls())
+
+# Load required packages
+library(dplyr)
+library(ggplot2)
+library(textshape)
+library(tibble)
+
+############################
+##### GLOBAL VARIABLES #####
+############################
+
+base = getwd()
+
+# Name of input and output directories:
+input_path = file.path(base, "Data/enrichment_input//")
+output_path = file.path(base, "Data/enrichment_results//")
+
+# Cell types of interest
+cellTypes = c(
+  'Cancer', 'Cl_Mac', 'Th', 'B', 'Tc', 'Treg', 'Endothelial',
+  'Alt_Mac', 'Neutrophil', 'Cl_Mo', 'Unknown', 'NK', 'T_other',
+  'Non-Cl_Mo', 'Int_Mo', 'Mast', 'DC'
+)
+
+  
+  
+experiment_path = "Data/enrichment_input/"
+path = experiment_path
+# Call the function to prep the data & then run log2FC calculation and plotting
+# data_prep(experiment_path, cellTypes)
+######################################################################################
+
+#### Comparing baseline and permutation neighbour data ##
+data_prep = function(path, select) {
+  # Load baseline and permutation data for each treatment group
+  data_baseline_meaned = read.csv(
+    paste(
+      path,
+      "permutation_results_300_meaned_280624.csv",
+      sep = ""
+    )
+  )
+  dat_perm_pvals = read.csv(
+    paste(
+      path,
+      "permutation_results_300_pvals_280624.csv",
+      sep = ""
+    )
+  )
+  # dat_perm_ori = read.csv(
+  #   paste(
+  #     path,
+  #     "permutation_300_original_values_280624.csv",
+  #     sep = ""
+  #   )
+  # )
+  
+  # Create unique ID based on pairing neighbour combination, group and treatment for pvals and mean of the permutation runs
+  dat_perm_pvals$ID = paste(
+    dat_perm_pvals$Patient_ID,
+    dat_perm_pvals$community,
+    dat_perm_pvals$source_cluster,
+    dat_perm_pvals$target_cluster,
+    sep = "_"
+  )
+  data_baseline_meaned$ID = paste(
+    data_baseline_meaned$Patient_ID,
+    data_baseline_meaned$community,
+    data_baseline_meaned$source_cluster,
+    data_baseline_meaned$target_cluster,
+    sep = "_"
+  )
+  
+  #### Add p-value data to dat_perm for plotting ####
+  # Create a unique ID based on first and second labels, image number and treatment
+  data_meaned_pvals <- merge(data_baseline_meaned, dat_perm_pvals[,-c(1,2,3,4,5)], by = "ID")
+  view(data_meaned_pvals)
+  
+  
+  # Add significance values from dat_p to dat_perm_mean
+# 
+  dat_perm_mean = subset(dat_perm_mean, FirstLabel %in% select &
+                           SecondLabel %in% select)
+  dim(data_meaned_pvals)
+  
+  print("Data prep function complete")
+  
+  # Call log2FC function
+  log2FC(path, data_meaned_pvals)
+}
+
+##################################
+## Calculating log2 fold change and plotting volcanoes ##
+data = data_meaned_pvals
+data$log2 = log2(data$mean_obs / data$mean_perm)
+
+
+# get rid of inf and -inf in log2 by removing 0 counts
+# celltypes_filter = c("Tc", "Treg", 'T_other', 'Neutrophil', 'Cl_Mac', 'B')
+# celltypes_filter = c("Tc", "Th", 'B', 'Endothelial', 'Cl_Mac', 'Treg')
+celltypes_filter = c("Tc", "Th", 'Endothelial', 'Cl_Mac')
+
+community_filter = c(26, 27)
+
+
+data <- data[data$mean_obs != 0, ]
+data <- data[data$mean_perm != 0, ]
+
+# data <- data[data$source_cluster != 0, ]
+
+data_tcells = subset(data, source_cluster %in% celltypes_filter &
+                         target_cluster %in% celltypes_filter)
+data_tcells = subset(data_tcells, community %in% community_filter)
+data_tcells$community <- as.character(data_tcells$community)
+
+
+
+# Modify 'sig' column to show "Significant" and "Non-significant"
+data_tcells$sig[data_tcells$sig == "True"] <- "Significant"
+data_tcells$sig[data_tcells$sig == "False"] <- "Not significant"
+
+# Convert p-values to -log10 scale
+data_tcells <- data_tcells %>%
+  mutate(negLogP = -log10(p))
+
+# view(data_tcells)
+
+data_tcells$new_ID = paste(
+  data_tcells$source_cluster,
+  data_tcells$target_cluster,
+  sep = " - "
+)
+
+# Define thresholds
+x_threshold <- 0.3
+y_threshold <- -log10(0.01)
+
+# Calculate the counts above both thresholds for each facet and community
+data_summary_pos <- data_tcells %>%
+  group_by(new_ID, community) %>%
+  summarise(
+    count_above_pos = sum(log2 > x_threshold & negLogP > y_threshold)
+  ) %>%
+  ungroup() %>%
+  mutate(label = paste("Pos. Hits:", count_above_pos))
+
+# Calculate the counts above both thresholds for each facet and community
+data_summary_neg <- data_tcells %>%
+  group_by(new_ID, community) %>%
+  summarise(
+    count_above_neg = sum(-log2 > x_threshold & negLogP > y_threshold)
+  ) %>%
+  ungroup() %>%
+  mutate(label = paste("Neg. Hits:", count_above_neg))
+
+
+# Volcano plot with faceting by group
+volcano_plot <- ggplot(data_tcells, aes(x = log2, y = negLogP)) +
+  geom_point(aes(color = community), size = 0.1) +
+  scale_color_manual(values = c('26' = "red", '27' = "blue")) +
+  theme_minimal() +
+  labs(
+    title = "Volcano Plot",
+    x = "Log2 Fold Change",
+    y = "-Log10(P-value)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.title = element_blank()
+  ) +
+facet_wrap(~ new_ID, scales = "fixed") +
+geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = "black") + 
+geom_vline(xintercept = 0.3, linetype = "dashed", color = "black") +
+geom_vline(xintercept = -0.3, linetype = "dashed", color = "black")+
+  geom_text(data = data_summary_pos[data_summary_pos$community == 26, ], aes(x = 1.5, y = 0.5, label = label),
+            color = 'red', hjust = 1.1, vjust = 1.1, size = 2, inherit.aes = FALSE) +
+  geom_text(data = data_summary_pos[data_summary_pos$community == 27, ], aes(x = 1.5, y = 0.2, label = label),
+            color = 'blue', hjust = 1.1, vjust = 1.1, size = 2, inherit.aes = FALSE)+
+  
+  geom_text(data = data_summary_neg[data_summary_neg$community == 26, ], aes(x = -1.2, y = 0.5, label = label),
+            color = 'red', hjust = 1.1, vjust = 1.1, size = 2, inherit.aes = FALSE) +
+  geom_text(data = data_summary_neg[data_summary_neg$community == 27, ], aes(x = -1.2, y = 0.2, label = label),
+            color = 'blue', hjust = 1.1, vjust = 1.1, size = 2, inherit.aes = FALSE)
+# data_summary[data_summary$community == "27"]
+
+
+# table(data_tcells$source_cluster)
+# data_summary$community == "26"
+ggsave(
+  filename =   paste(
+    output_path,
+    "volcano_2627_cellfilter_hits_fimp+treg",
+    ".jpg",
+    sep = ""
+  ),
+  plot = volcano_plot,
+  width = 10,  # Width in inches
+  height = 8,  # Height in inches
+  dpi = 300    # Resolution in dots per inch
+)
+
+
+# Volcano plot
+ggplot(data, aes(x = log2, y = negLogP)) +
+  geom_point(aes(color = sig)) +
+  scale_color_manual(values = c("Significant" = "red", "Not Significant" = "grey")) +
+  theme_minimal() +
+  labs(
+    title = "Volcano Plot",
+    x = "Log2 Fold Change",
+    y = "-Log10(P-value)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.title = element_blank()
+  )
+
+
+
+
